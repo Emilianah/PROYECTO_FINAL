@@ -1,0 +1,89 @@
+services:
+  swapshop-api:
+    build: ./services/swapshop-api
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_TTL_SECONDS=60
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DB=swapshop
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+    depends_on:
+      - redis
+      - mysql
+    networks:
+      - swapnet
+
+  receiver-notificaciones:
+    build: ./services/receiver-notificaciones
+    ports:
+      - "8002:8000"
+    networks:
+      - swapnet
+
+  poller-despachos:
+    build: ./services/poller-despachos
+    environment:
+      - SWAPSHOP_API_URL=http://swapshop-api:8000
+      - WEBHOOK_RECEIVER_URL=http://receiver-notificaciones:8000/webhooks/order-ready
+      - POLL_INTERVAL_SECONDS=5
+    depends_on:
+      - swapshop-api
+      - receiver-notificaciones
+    networks:
+      - swapnet
+
+  swapshop-frontend:
+    build: ./services/swap-shop-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - swapshop-api
+      - receiver-notificaciones
+    networks:
+      - swapnet
+
+  redis:
+    image: redis:7
+    container_name: swapshop-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - swapnet
+
+  # NUEVO: Redis Commander
+  redis-commander:
+    image: rediscommander/redis-commander
+    container_name: swapshop-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - swapnet
+
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: swapshop
+    ports:
+      - "3308:3306"
+    networks:
+      - swapnet
+
+networks:
+  swapnet:
+    driver: bridge
+
+volumes:
+  redis_data:
